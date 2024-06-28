@@ -15,21 +15,17 @@ load_dotenv()
 
 # Solana Pay configuration
 MERCHANT_WALLET = PublicKey("4EAs5aihFPbxJ3FHXHxKJV6Zic9CM45VhvcRLMFuYTK2")
-CUSTOMER_WALLET_PRIVATE_KEY = os.getenv('CUSTOMER_WALLET_PRIVATE_KEY')
-
-# Debug: Print the value of CUSTOMER_WALLET_PRIVATE_KEY
-print(f"CUSTOMER_WALLET_PRIVATE_KEY: {CUSTOMER_WALLET_PRIVATE_KEY}")
-
-if CUSTOMER_WALLET_PRIVATE_KEY is None:
-    st.error("CUSTOMER_WALLET_PRIVATE_KEY is not set in the environment variables.")
-    st.stop()
-
+# Configuration
 try:
-    CUSTOMER_WALLET = Keypair.from_private_key(bytes.fromhex(CUSTOMER_WALLET_PRIVATE_KEY))
-except ValueError as e:
-    st.error(f"Error creating CUSTOMER_WALLET: {str(e)}")
-    st.error("Make sure CUSTOMER_WALLET_PRIVATE_KEY is a valid hexadecimal string.")
+    MERCHANT_WALLET = PublicKey(st.secrets["solana"]["MERCHANT_WALLET"])
+    CUSTOMER_WALLET_PRIVATE_KEY = st.secrets["wallet"]["CUSTOMER_WALLET_PRIVATE_KEY"]
+    SOLANA_API_URL = st.secrets["solana"]["API_URL"]
+    GOOGLE_API_KEY = st.secrets["api_keys"]["GOOGLE_API_KEY"]
+except KeyError as e:
+    st.error(f"Missing configuration: {str(e)}")
+    st.error("Please check your .streamlit/secrets.toml file or Streamlit Cloud secrets configuration.")
     st.stop()
+
 # Initialize Solana client with mainnet-beta API
 client = Client("https://api.mainnet-beta.solana.com")
 
