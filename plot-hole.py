@@ -1,9 +1,56 @@
 import streamlit as st
-import google.generativeai as genai
+from solathon import Client, Keypair, PublicKey
+from solathon.solana_pay import encode_url, create_qr, find_reference, validate_transfer
+from solathon.core.types import TransactionSignature
+from io import BytesIO
+import time
 import pdfplumber
 import os
+import google.generativeai as genai
+from dotenv import load_dotenv
+from PIL import Image
+from solathon import Keypair
+# Load environment variables
+load_dotenv()
 
-# Function to extract text from PDF
+# Solana Pay configuration
+MERCHANT_WALLET = PublicKey("4EAs5aihFPbxJ3FHXHxKJV6Zic9CM45VhvcRLMFuYTK2")
+
+
+CUSTOMER_WALLET_PRIVATE_KEY = os.getenv('CUSTOMER_WALLET_PRIVATE_KEY')
+CUSTOMER_WALLET = Keypair.from_private_key(bytes.fromhex(CUSTOMER_WALLET_PRIVATE_KEY))
+
+# Initialize Solana client with mainnet-beta API
+client = Client("https://api.mainnet-beta.solana.com")
+
+# Get Google API key from environment variable
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+
+def checkout_params(amount):
+    label = "Screenplay Analysis Service"
+    message = "Screenplay Analysis - Order #" + str(int(time.time()))
+    reference = Keypair().public_key
+    return [label, message, amount, reference]
+
+def generate_payment_link(amount):
+    [label, message, amount, reference] = checkout_params(amount)
+    url = encode_url({
+        "recipient": MERCHANT_WALLET,
+        "label": label,
+        "message": message,
+        "amount": amount,
+        "reference": reference
+    })
+    return url, reference
+
+def create_smaller_qr(url, size=(400, 400)):
+    qr_image_stream = create_qr(url)
+    qr_image = Image.open(qr_image_stream)
+    qr_image_resized = qr_image.resize(size, Image.LANCZOS)
+    buffered = BytesIO()
+    qr_image_resized.save(buffered, format="PNG")
+    return buffered
+
 def extract_text_from_pdf(pdf_file):
     text = ""
     with pdfplumber.open(pdf_file) as pdf:
@@ -11,66 +58,172 @@ def extract_text_from_pdf(pdf_file):
             text += page.extract_text()
     return text
 
-# Streamlit app
-st.title("Screenplay Plot Hole Analyzer")
+def analyze_screenplay(screenplay_text):
+    genai.configure(api_key=GOOGLE_API_KEY)
+    prompt = f"""You are an expert screenplay analyst with years of experience in the film industry. Your task is to provide a comprehensive, insightful, and actionable analysis of the given screenplay to help the writer elevate their work to a professional level. 
 
-st.write("""
-Upload your screenplay in PDF format, and this tool will analyze it for plot holes using Google's Generative AI.
-""")
+Screenplay: ```{screenplay_text}```
 
-uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+Please conduct a thorough analysis covering the following aspects:
 
-if uploaded_file is not None:
-    # Save uploaded file temporarily
-    with open("uploaded_screenplay.pdf", "wb") as f:
-        f.write(uploaded_file.getbuffer())
+1. Story Structure and Plot (20% of analysis):
+   - Evaluate the three-act structure or alternative story structure used.
+   - Identify the inciting incident, plot points, midpoint, and climax.
+   - Analyze the effectiveness of the story arc and character journeys.
+   - Highlight any plot holes or inconsistencies, providing specific examples and page numbers.
+   - Suggest improvements to strengthen the overall narrative structure.
+   - Compare the plot structure to successful films in the same genre.
+
+2. Character Development (20% of analysis):
+   - Assess the depth and arc of the protagonist, antagonist, and supporting characters.
+   - Evaluate character motivations, conflicts, and relationships.
+   - Analyze how character relationships evolve throughout the story.
+   - Identify any stereotypes or underdeveloped characters.
+   - Suggest ways to make characters more three-dimensional and compelling.
+
+3. Dialogue and Voice (15% of analysis):
+   - Analyze the authenticity and distinctiveness of each character's voice.
+   - Highlight examples of strong dialogue and areas that need improvement, citing specific page numbers.
+   - Assess the balance between dialogue and action.
+   - Offer suggestions for making the dialogue more engaging and true to each character.
+   - Compare the dialogue style to successful films in the same genre.
+
+4. Pacing and Tension (10% of analysis):
+   - Evaluate the overall pacing of the screenplay.
+   - Identify any scenes that drag or feel rushed, providing page numbers.
+   - Assess how well tension and conflict are maintained throughout the story.
+   - Provide recommendations for improving pacing and building suspense.
+
+5. Theme and Subtext (10% of analysis):
+   - Identify the main themes and how well they are explored.
+   - Analyze the use of subtext and symbolism.
+   - Suggest ways to deepen thematic elements and make them more impactful.
+   - Consider how these themes might resonate with the target audience.
+
+6. Visual Storytelling and Scene Description (10% of analysis):
+   - Evaluate the effectiveness of scene descriptions and action lines.
+   - Assess how well the writer uses visual elements to convey the story.
+   - Offer suggestions for improving the visual aspect of the screenplay.
+   - Provide examples of particularly strong or weak visual storytelling, citing page numbers.
+
+7. Worldbuilding (5% of analysis):
+   - Assess the uniqueness and consistency of the story's world.
+   - Evaluate how well the setting is integrated into the plot and characters.
+   - Suggest ways to make the world more immersive or impactful.
+
+8. Genre Conventions and Market Potential (5% of analysis):
+   - Analyze how well the screenplay fits within its intended genre.
+   - Assess its potential appeal to producers and audiences.
+   - Suggest ways to enhance its marketability while maintaining artistic integrity.
+   - Compare it to recent successful films in the same genre.
+
+9. Formatting and Technical Aspects (5% of analysis):
+   - Check for proper screenplay formatting.
+   - Identify any technical issues that need addressing.
+
+10. Overall Impression and Next Steps:
+    - Provide a summary of the screenplay's strengths and areas for improvement.
+    - Offer specific, actionable steps the writer can take to elevate the screenplay.
+    - Give an overall assessment of the screenplay's potential and readiness for submission.
+
+For each section, strive to balance criticism with praise. Provide specific examples from the screenplay, including page numbers, to illustrate your points. Offer concrete, step-by-step suggestions for improvement in each area. Your analysis should be both critical and constructive, offering encouragement alongside areas for improvement.
+
+Please format your analysis using clear headings and subheadings for each section. Use bullet points where appropriate for clarity.
+"""
+    model = genai.GenerativeModel(model_name='gemini-1.5-pro-latest')
+    response = model.generate_content([prompt])
     
-    # Extract text from PDF
-    screenplay_text = extract_text_from_pdf("uploaded_screenplay.pdf")
-
-    # Configure the Google Generative AI
-    api_key = st.text_input("Enter your Google Generative AI API Key:", type="password")
-    if api_key:
-        genai.configure(api_key=api_key)
-
-        # Create the prompt
-        prompt = f"""
-        You are an advanced AI agent specializing in screenplay analysis. Your task is to critically analyze the given screenplay and provide detailed feedback to help the writer improve their work.
-
-        Screenplay: ```{screenplay_text}```
-
-        Please follow these steps in your analysis:
-
-        1. Identify potential plot holes, inconsistencies, and areas that need improvement in the screenplay. For each issue found, provide the following details:
-           - A brief description of the issue
-           - The specific plot point or scene where the issue occurs
-           - The corresponding page number(s) in the screenplay
-
-        2. Offer detailed suggestions and recommendations on how to address each identified issue. Provide creative solutions and alternative approaches to strengthen the narrative and enhance the overall flow of the screenplay.
-
-        3. Highlight any character inconsistencies or underdeveloped character arcs. Suggest ways to deepen character development and ensure their actions and motivations align throughout the screenplay.
-
-        4. Analyze the pacing and structure of the screenplay. Identify any pacing issues, such as scenes that drag or feel rushed. Provide recommendations on how to improve the pacing and maintain audience engagement.
-
-        5. Evaluate the dialogue and offer suggestions for improvement. Highlight any unclear, unrealistic, or redundant dialogue and provide examples of how to refine it.
-
-        6. Assess the overall themes and message of the screenplay. Provide insights on how well the themes are developed and integrated into the narrative. Offer suggestions to strengthen the thematic elements and ensure they resonate throughout the story.
-
-        7. Provide an overall assessment of the screenplay's strengths and weaknesses. Offer encouragement and constructive feedback to help the writer take their work to the next level.
-
-        Please format your analysis in a clear and organized manner, using appropriate headings and subheadings for each section. Provide specific examples and references to the screenplay whenever possible to support your feedback.
-        """
-
-        # Analyze screenplay text for plot holes
-        st.write("Analyzing the screenplay for plot holes...")
-        model = genai.GenerativeModel(model_name='gemini-1.5-pro-latest')
-        response = model.generate_content([prompt])
-
-        # Display the analysis result
-        st.write("Plot Hole Analysis Result:")
-        st.markdown(response.text)
+    if response.prompt_feedback.block_reason:
+        return f"Analysis was blocked. Reason: {response.prompt_feedback.block_reason}"
     
-    # Remove the temporary file
-    os.remove("uploaded_screenplay.pdf")
-else:
-    st.write("Please upload a PDF file.")
+    if not response.candidates:
+        return "No response was generated. The model might not have produced any output."
+    
+    return response.text
+
+def main():
+    st.title("Screenplay Analysis Service")
+
+    # Payment section
+    st.header("Step 1: Payment")
+    amount = 0.0001  # Price for the service
+    st.write(f"Price for Screenplay Analysis: {amount} SOL")
+
+    if 'payment_link_generated' not in st.session_state:
+        st.session_state.payment_link_generated = False
+
+    if 'reference' not in st.session_state:
+        st.session_state.reference = None
+
+    if 'url' not in st.session_state:
+        st.session_state.url = None
+
+    if st.button("Generate Payment Link") or st.session_state.payment_link_generated:
+        if not st.session_state.payment_link_generated:
+            url, reference = generate_payment_link(amount)
+            st.session_state.payment_link_generated = True
+            st.session_state.reference = reference
+            st.session_state.url = url
+        else:
+            url = st.session_state.url
+
+        st.subheader("Payment Link:")
+        st.code(url)
+
+        qr_image_stream = create_smaller_qr(url, size=(400, 400))
+        st.image(qr_image_stream)
+
+        st.info("Please scan the QR code or use the link above to make the payment. Once you've sent the SOL, click the 'Confirm Transaction' button below.")
+
+        if st.button("Confirm Transaction"):
+            with st.spinner('Confirming transaction... This may take up to a minute.'):
+                payment_status = st.empty()
+                for _ in range(10):  # Wait for up to 10 seconds
+                    try:
+                        sign: TransactionSignature = find_reference(client, st.session_state.reference)
+                        payment_status.warning("Transaction found, validating...")
+                        
+                        if validate_transfer(client, sign.signature, {
+                            "recipient": MERCHANT_WALLET,
+                            "amount": amount,
+                            "reference": [st.session_state.reference]
+                        }):
+                            payment_status.success("Payment validated! You can now proceed to upload your screenplay.")
+                            st.session_state.payment_successful = True
+                            st.rerun()
+                            break
+                    except Exception:
+                        time.sleep(1)
+                        continue
+                else:
+                    payment_status.error("Payment not found or validated within the time limit. Please try again or contact support if you believe this is an error.")
+
+    # Screenplay analysis section (only shown after successful payment)
+    if st.session_state.get('payment_successful', False):
+        st.header("Step 2: Screenplay Analysis")
+        st.write("""Upload your screenplay in PDF format, and our advanced AI will provide a comprehensive analysis to help improve your work.""")
+
+        uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
+        if uploaded_file is not None:
+            with open("uploaded_screenplay.pdf", "wb") as f:
+                f.write(uploaded_file.getbuffer())
+
+            screenplay_text = extract_text_from_pdf("uploaded_screenplay.pdf")
+
+            if GOOGLE_API_KEY:
+                if st.button("Analyze Screenplay"):
+                    with st.spinner('Analyzing your screenplay... This may take a few minutes.'):
+                        try:
+                            analysis_result = analyze_screenplay(screenplay_text)
+                            st.success('Analysis complete!')
+                            st.write("Screenplay Analysis Result:")
+                            st.markdown(analysis_result)
+                        except Exception as e:
+                            st.error(f"An error occurred during analysis: {str(e)}")
+                        finally:
+                            os.remove("uploaded_screenplay.pdf")
+            else:
+                st.error("Google API Key not found. Please check your environment configuration.")
+
+if __name__ == "__main__":
+    main()
