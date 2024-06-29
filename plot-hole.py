@@ -191,10 +191,10 @@ def main():
         qr_image_stream = create_smaller_qr(url, size=(400, 400))
         st.image(qr_image_stream)
 
-        st.info("Please scan the QR code or use the link above to make the payment. Once you've sent the SOL, click the 'Confirm Transaction' button below.")
+        st.info("Please scan the QR code or use the link above to make the payment. Once you've sent the SOL, click the 'Warm Up AI' button below.")
 
-        if st.button("Confirm Transaction"):
-            with st.spinner('Confirming transaction... This may take up to a minute.'):
+        if st.button("Warm Up AI"):
+            with st.spinner('Warming up the AI machine now.. This may take up to a minute.'):
                 payment_status = st.empty()
                 for _ in range(10):  # Wait for up to 10 seconds
                     try:
