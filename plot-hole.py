@@ -35,9 +35,6 @@ except KeyError as e:
 # Initialize Solana client with the API URL from secrets
 client = Client(SOLANA_API_URL)
 
-# Debug: Print the first few characters of the private key (for verification purposes only)
-st.write(f"CUSTOMER_WALLET_PRIVATE_KEY (first 5 chars): {CUSTOMER_WALLET_PRIVATE_KEY[:5]}...")
-
 try:
     CUSTOMER_WALLET = Keypair.from_private_key(bytes.fromhex(CUSTOMER_WALLET_PRIVATE_KEY))
 except ValueError as e:
