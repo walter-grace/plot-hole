@@ -10,20 +10,27 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
 from solathon import Keypair
+import tempfile
+
 # Load environment variables
 load_dotenv()
 
 # Solana Pay configuration
 MERCHANT_WALLET = PublicKey("4EAs5aihFPbxJ3FHXHxKJV6Zic9CM45VhvcRLMFuYTK2")
-# Configuration
+CUSTOMER_WALLET_PRIVATE_KEY = os.getenv('CUSTOMER_WALLET_PRIVATE_KEY')
+
+# Debug: Print the value of CUSTOMER_WALLET_PRIVATE_KEY
+print(f"CUSTOMER_WALLET_PRIVATE_KEY: {CUSTOMER_WALLET_PRIVATE_KEY}")
+
+if CUSTOMER_WALLET_PRIVATE_KEY is None:
+    st.error("CUSTOMER_WALLET_PRIVATE_KEY is not set in the environment variables.")
+    st.stop()
+
 try:
-    MERCHANT_WALLET = PublicKey(st.secrets["solana"]["MERCHANT_WALLET"])
-    CUSTOMER_WALLET_PRIVATE_KEY = st.secrets["wallet"]["CUSTOMER_WALLET_PRIVATE_KEY"]
-    SOLANA_API_URL = st.secrets["solana"]["API_URL"]
-    GOOGLE_API_KEY = st.secrets["api_keys"]["GOOGLE_API_KEY"]
-except KeyError as e:
-    st.error(f"Missing configuration: {str(e)}")
-    st.error("Please check your .streamlit/secrets.toml file or Streamlit Cloud secrets configuration.")
+    CUSTOMER_WALLET = Keypair.from_private_key(bytes.fromhex(CUSTOMER_WALLET_PRIVATE_KEY))
+except ValueError as e:
+    st.error(f"Error creating CUSTOMER_WALLET: {str(e)}")
+    st.error("Make sure CUSTOMER_WALLET_PRIVATE_KEY is a valid hexadecimal string.")
     st.stop()
 
 # Initialize Solana client with mainnet-beta API
@@ -207,29 +214,31 @@ def main():
     # Screenplay analysis section (only shown after successful payment)
     if st.session_state.get('payment_successful', False):
         st.header("Step 2: Screenplay Analysis")
-        st.write("""Upload your screenplay in PDF format, and our advanced AI will provide a comprehensive analysis to help improve your work.""")
+        st.write("Upload your screenplay in PDF format, and our advanced AI will provide a comprehensive analysis to help improve your work.")
 
         uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
         if uploaded_file is not None:
-            with open("uploaded_screenplay.pdf", "wb") as f:
-                f.write(uploaded_file.getbuffer())
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                temp_file.write(uploaded_file.getbuffer())
+                temp_file_path = temp_file.name
 
-            screenplay_text = extract_text_from_pdf("uploaded_screenplay.pdf")
+            try:
+                screenplay_text = extract_text_from_pdf(temp_file_path)
 
-            if GOOGLE_API_KEY:
-                if st.button("Analyze Screenplay"):
-                    with st.spinner('Analyzing your screenplay... This may take a few minutes.'):
-                        try:
-                            analysis_result = analyze_screenplay(screenplay_text)
-                            st.success('Analysis complete!')
-                            st.write("Screenplay Analysis Result:")
-                            st.markdown(analysis_result)
-                        except Exception as e:
-                            st.error(f"An error occurred during analysis: {str(e)}")
-                        finally:
-                            os.remove("uploaded_screenplay.pdf")
-            else:
-                st.error("Google API Key not found. Please check your environment configuration.")
+                if GOOGLE_API_KEY:
+                    if st.button("Analyze Screenplay"):
+                        with st.spinner('Analyzing your screenplay... This may take a few minutes.'):
+                            try:
+                                analysis_result = analyze_screenplay(screenplay_text)
+                                st.success('Analysis complete!')
+                                st.write("Screenplay Analysis Result:")
+                                st.markdown(analysis_result)
+                            except Exception as e:
+                                st.error(f"An error occurred during analysis: {str(e)}")
+            finally:
+                os.unlink(temp_file_path)
+        else:
+            st.error("Google API Key not found. Please check your environment configuration.")
 
 if __name__ == "__main__":
     main()
