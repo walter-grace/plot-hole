@@ -164,7 +164,7 @@ def main():
 
     # Payment section
     st.header("Step 1: Payment")
-    amount = 0.0001  # Price for the service
+    amount = 0.005  # Price for the service
     st.write(f"Price for Screenplay Analysis: {amount} SOL")
 
     if 'payment_link_generated' not in st.session_state:
